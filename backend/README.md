@@ -60,7 +60,7 @@ Once the server is running, visit:
 ## Docker Setup
 
 ### Development with Docker Compose
-
+LIVE- https://smart-pay-assist-ai-split-e4qo.vercel.app/
 ```bash
 docker-compose up --build
 ```
