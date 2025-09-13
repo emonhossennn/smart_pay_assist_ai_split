@@ -1,43 +1,32 @@
 {
-  "version": 2,
-  "builds": [
+  "buildCommand": "cd project && npm run build",
+  "outputDirectory": "project/dist",
+  "installCommand": "cd project && npm install",
+  "framework": null,
+  "rewrites": [
     {
-      "src": "project/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    },
-    {
-      "src": "backend/smartpay_backend/wsgi.py",
-      "use": "@vercel/python"
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ],
-  "routes": [
+  "headers": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/smartpay_backend/wsgi.py"
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     },
     {
-      "src": "/admin/(.*)",
-      "dest": "backend/smartpay_backend/wsgi.py"
-    },
-    {
-      "src": "/static/(.*)",
-      "dest": "backend/smartpay_backend/wsgi.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "project/index.html"
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
     }
-  ],
-  "env": {
-    "DEBUG": "False",
-    "DJANGO_SETTINGS_MODULE": "smartpay_backend.settings.production"
-  },
-  "functions": {
-    "backend/smartpay_backend/wsgi.py": {
-      "runtime": "python3.9"
-    }
-  }
+  ]
 }
