@@ -2,12 +2,25 @@
 Production settings for smartpay_backend project.
 """
 
+import os
 from .base import *
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*').split(',') if config('ALLOWED_HOSTS', default='') else ['*']
+
+# Vercel deployment settings
+if 'VERCEL_URL' in os.environ:
+    ALLOWED_HOSTS.append(config('VERCEL_URL'))
+if 'VERCEL_ENV' in os.environ:
+    ALLOWED_HOSTS.extend([
+        '.vercel.app',
+        '.vercel.com',
+        'smartpay-assist-ai.vercel.app',
+        'localhost',
+        '127.0.0.1'
+    ])
 
 # Database
 DATABASES = {

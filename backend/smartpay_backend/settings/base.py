@@ -175,7 +175,15 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://smartpay-assist-ai.vercel.app",
+    "https://smartpay-assist-ai-split.vercel.app",
 ]
+
+# Allow all origins for Vercel deployment
+if config('VERCEL_ENV', default='') == 'production':
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
 
 CORS_ALLOW_CREDENTIALS = True
 

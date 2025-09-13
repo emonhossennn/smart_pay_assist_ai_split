@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Upload, Users, CreditCard, Bell, DollarSign, Receipt, CheckCircle, Clock, AlertTriangle, Home, Settings, User } from 'lucide-react';
+import { Camera, Upload, Users, CreditCard, Bell, DollarSign, Receipt, CheckCircle, Clock, AlertTriangle, Home, Settings, User, Wifi, WifiOff } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAuthStore, useBillsStore, useUIStore, useNotificationsStore } from './store';
+import { formatCurrency, formatRelativeTime, cn } from './utils';
+import toast from 'react-hot-toast';
 
 // Types
 interface User {
@@ -89,12 +93,73 @@ const sampleBills: Bill[] = [
 ];
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'upload' | 'bills' | 'profile'>('home');
-  const [bills, setBills] = useState<Bill[]>(sampleBills);
-  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
-  const [showBillDetails, setShowBillDetails] = useState(false);
+  // State management
+  const { activeTab, setActiveTab, showBillDetails, setShowBillDetails, isMobile, setIsMobile } = useUIStore();
+  const { bills, selectedBill, setSelectedBill, addBill, updateBill } = useBillsStore();
+  const { notifications, unreadCount } = useNotificationsStore();
+  
+  // Local state
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  // PWA and connectivity effects
+  useEffect(() => {
+    // Handle online/offline status
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast.success('Connection restored');
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast.error('Connection lost. Working offline.');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Handle PWA install prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Handle mobile viewport
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [setIsMobile]);
+
+  // Initialize with sample data if empty
+  useEffect(() => {
+    if (bills.length === 0) {
+      sampleBills.forEach(bill => addBill(bill));
+    }
+  }, [bills.length, addBill]);
+
+  // PWA install handler
+  const handleInstallApp = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        toast.success('App installed successfully!');
+      }
+      setInstallPrompt(null);
+    }
+  };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -110,27 +175,33 @@ function App() {
 
   const simulateImageProcessing = () => {
     setIsProcessing(true);
+    toast.loading('Processing receipt...', { id: 'processing' });
+    
     setTimeout(() => {
       setIsProcessing(false);
+      toast.success('Receipt processed successfully!', { id: 'processing' });
+      
       const newBill: Bill = {
         id: Date.now().toString(),
         title: `Receipt ${new Date().toLocaleDateString()}`,
-        imageUrl: uploadedImage || undefined,
-        totalAmount: 67.45,
+        description: 'AI-processed receipt',
+        total_amount: 67.45,
+        image: uploadedImage || undefined,
         items: [
-          { id: '1', name: 'Coffee x2', price: 8.50, assignedTo: [] },
-          { id: '2', name: 'Sandwich', price: 12.99, assignedTo: [] },
-          { id: '3', name: 'Salad Bowl', price: 15.99, assignedTo: [] },
-          { id: '4', name: 'Smoothie', price: 7.50, assignedTo: [] },
-          { id: '5', name: 'Tax', price: 5.41, assignedTo: [] },
-          { id: '6', name: 'Tip (18%)', price: 17.06, assignedTo: [] }
+          { id: '1', name: 'Coffee x2', price: 8.50, assigned_to: [] },
+          { id: '2', name: 'Sandwich', price: 12.99, assigned_to: [] },
+          { id: '3', name: 'Salad Bowl', price: 15.99, assigned_to: [] },
+          { id: '4', name: 'Smoothie', price: 7.50, assigned_to: [] },
+          { id: '5', name: 'Tax', price: 5.41, assigned_to: [] },
+          { id: '6', name: 'Tip (18%)', price: 17.06, assigned_to: [] }
         ],
         participants: sampleUsers.slice(0, 2),
-        createdAt: new Date(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         status: 'processing',
-        payments: []
+        created_by: '1'
       };
-      setBills([newBill, ...bills]);
+      addBill(newBill);
       setSelectedBill(newBill);
       setShowBillDetails(true);
       setActiveTab('bills');
@@ -695,22 +766,55 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 backdrop-blur-lg bg-white/95">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <motion.div 
+                className="h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
                 <DollarSign className="h-6 w-6 text-white" />
-              </div>
+              </motion.div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">SmartPay Assist AI</h1>
-                <p className="text-xs text-gray-500">Split bills intelligently</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-gray-500">Split bills intelligently</p>
+                  {!isOnline && (
+                    <div className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                      <WifiOff className="h-3 w-3" />
+                      Offline
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+            <div className="flex items-center gap-2">
+              {/* PWA Install Button */}
+              {installPrompt && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  onClick={handleInstallApp}
+                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors duration-200 text-sm font-medium"
+                >
+                  <Upload className="h-4 w-4" />
+                  Install App
+                </motion.button>
+              )}
+              
+              {/* Notifications */}
+              <button className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-200">
                 <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
+              
+              {/* User Avatar */}
               <div className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
                 <User className="h-5 w-5 text-white" />
               </div>
@@ -734,34 +838,48 @@ function App() {
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2">
+      <motion.nav 
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
+        className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-gray-200 px-4 py-2 z-40"
+      >
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-around items-center">
+          <div className="flex justify-around items-center relative">
             {[
               { id: 'home', icon: Home, label: 'Home' },
               { id: 'upload', icon: Camera, label: 'Scan' },
               { id: 'bills', icon: Receipt, label: 'Bills' },
               { id: 'profile', icon: Settings, label: 'Settings' }
             ].map(({ id, icon: Icon, label }) => (
-              <button
+              <motion.button
                 key={id}
                 onClick={() => {
                   setActiveTab(id as any);
                   setShowBillDetails(false);
                 }}
-                className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
+                className={cn(
+                  "flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 relative z-10",
                   activeTab === id
-                    ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
+                    ? "text-white"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <Icon className="h-5 w-5" />
-                <span className="text-xs font-medium">{label}</span>
-              </button>
+                {activeTab === id && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <Icon className="h-5 w-5 relative z-10" />
+                <span className="text-xs font-medium relative z-10">{label}</span>
+              </motion.button>
             ))}
           </div>
         </div>
-      </nav>
+      </motion.nav>
 
       {/* Bottom spacing for fixed nav */}
       <div className="h-20"></div>
